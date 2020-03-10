@@ -57,15 +57,15 @@ setup icon IDs for each device and state in QuickApp:initIcons function. If you 
 - [x] add support for rain module
 - [x] add support for outdoor module
 - [x] add separete device for indoor humid and temperature
-- [] add lang support
-- [] setup icon IDs via device variable
-- [] update user incons code via the module variables not the quickapp code
-- [] more debug and error handling
-- [] use pcall to handle "exceptions" in code to prevent app crash.
-- [] add actions to support module device refresh invoke.
-- [] split module data to separate variables and use event handlers to update module state
-- [] add separate device for outdoor humid and temperature
-- [] add support for additional indoor modules
-- [] add support for more then one station
-- [] add weather provider class with data from base station
+- [ ] add lang support
+- [ ] setup icon IDs via device variable
+- [ ] update user incons code via the module variables not the quickapp code
+- [ ] more debug and error handling
+- [ ] use pcall to handle "exceptions" in code to prevent app crash.
+- [ ] add actions to support module device refresh invoke.
+- [ ] split module data to separate variables and use event handlers to update module state
+- [ ] add separate device for outdoor humid and temperature
+- [ ] add support for additional indoor modules
+- [ ] add support for more then one station
+- [ ] add weather provider class with data from base station
 
