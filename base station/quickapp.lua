@@ -13,10 +13,10 @@
 -- self:updateView("button1", "text", "MUTE") 
 -- self:updateView("label", "text", "TURNED ON") 
 
-local clientId = fibaro.getGlobalVariable("netatmo_clientId")
-local secret = fibaro.getGlobalVariable("netatmo_secret")
-local username = fibaro.getGlobalVariable("netatmo_userName")
-local password = fibaro.getGlobalVariable("netatmo_password")
+local clientId = ""
+local secret = ""
+local username = ""
+local password = ""
 local baseUrl =  "https://api.netatmo.com"
 local refresh_s = 5 * 60
 
@@ -25,7 +25,20 @@ local RAIN_MODULE="NAModule3"
 local WIND_MODULE="NAModule2"
 local OUTDOOR_MODULE="NAModule1"
 local language="en"
-local sy = {}
+local sy={snow='\240\159\140\168',fog='\240\159\140\171',sunny='\226\152\128\239\184\143',partlysunny='\226\155\133\239\184\143',
+  partlycloudy='\226\155\133\239\184\143',mostlysunny='\240\159\140\164',mostlycloudy='\240\159\140\165',rain='\240\159\140\167',
+  flurries='\226\157\132\239\184\143',cloudy='\226\152\129\239\184\143',tornado='\240\159\140\170',chancerain='\240\159\140\166',
+  chancesleet='\240\159\140\168',chancetstorms='\240\159\140\170',chanceflurries='\226\157\132\239\184\143',
+  chancesnow='\226\152\131\239\184\143',windy='\240\159\140\172',wind='\240\159\140\172',gail='\240\159\146\168',clear='\226\152\128\239\184\143',
+  sleet='\226\155\136',hazy='\240\159\140\165',tstorms='\226\155\136',warning='\226\154\160\239\184\143',ok='\226\156\133',
+  temp='\240\159\140\161',humid='\240\159\146\167',noise='\240\159\148\138',co2='\240\159\152\183',arrowup='\226\134\145',
+  arrowdn='\226\134\147',arrow_up="\226\172\134\239\184\143",arrow_dn="\226\172\135\239\184\143",arrow_right="\226\158\161\239\184\143",
+  arrow_rraise="\226\134\151\239\184\143",arrow_rfall="\226\134\152\239\184\143",gust='\240\159\146\168',dir='\240\159\154\169',
+  rainfall='\226\152\148\239\184\143',umbrella='\226\152\130\239\184\143',closed_umbrella='\240\159\140\130',brihi='\240\159\148\134',
+  brilo='\240\159\148\133',sun='\226\152\128\239\184\143',heat='\240\159\140\158',cool='\226\157\132\239\184\143',
+  refresh="\240\159\148\132",in_envelope="\240\159\147\168",battery="\240\159\148\139",signal="\240\159\147\182",floppy='\240\159\146\190',
+  cd="\240\159\146\191",week="\240\157\147\166",month="\240\159\147\134",hour="\240\159\149\144",trackball="\240\159\150\178",
+  eye="\240\159\145\129",round_pushpin="\240\159\147\141",sep='\226\142\170',question='\226\157\147',trackball="\240\159\150\178"}
 
 local yellow = 1180
 local orange = 1890
@@ -170,11 +183,19 @@ local langTable={lng=lng,nlng=language,
         W="W",WNW="WNW",NW="NW",NNW="NNW"},
       weekdaymap={Sunday="Неделя",Monday="Понеделник",Tuesday="Вторник",Wednesday="Сряда",Thursday="Четвъртък",Friday="Петък",Saturday="Събота"},}}
 
+
+
 function createNetatmoClient(modules)
     self = {}
     self.baseApiUrl = baseUrl
     self.httpClient = net.HTTPClient()
     self.token = nil
+
+    clientId = appSelf:getVariable("clientId")
+    secret = appSelf:getVariable("secret")
+    username = appSelf:getVariable("username")
+    password = appSelf:getVariable("password")
+    baseUrl =  "https://api.netatmo.com"
 
     modules = modules or {}
 
@@ -1031,11 +1052,37 @@ function QuickApp:refreshView()
     end
 end
 
+function QuickApp:initVariables()
+    local checkVar = function(name, defaultValue, override)
+        local tmp = fibaro.getGlobalVariable(name)
+        if tmp == nil then
+            debug("creating global " .. name .. " variable")
+            local m = {
+                name = name,
+                isEnum = false,
+                readOnly = false,
+                value = json.encode(defaultValue)
+            }
+            api.post("/globalVariables", m)
+            debug("creating global " .. name .. " variable... DONE")
+        end
+        if override then
+            fibaro.setGlobalVariable(name, json.encode(defaultValue))
+        end
+    end
+
+    checkVar("netatmoModules", {})
+    checkVar("netatmo_sy", sy, override)
+end
+
 function QuickApp:onInit()
     self:debug("onInit")
-    self:initIcons()
+
     debug = function(text, ...) self:debug(text, ...) end
     verbose = function(text, ...) if trace then self:debug(text, ...) end end
+    
+    self:initIcons()
+    self:initVariables()
 
     appSelf = self
     local modules = fibaro.getGlobalVariable("netatmoModules")
@@ -1043,8 +1090,7 @@ function QuickApp:onInit()
         debug("reading modules from last gobal state")
     end
     self.nC = createNetatmoClient(modules)
-    local s = fibaro.getGlobalVariable("netatmo_sy")
-    sy = json.decode(s)
+
     self:displayNil()
     post({type="start"})     
 end
