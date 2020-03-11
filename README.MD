@@ -10,10 +10,20 @@ TBD description
 
 # Installation & configuration
 
-there is problem with global variable value length constraint on UI (teste on safari). It is not possible to set value longer then 20 chars
+there is problem with global variable value length constraint on UI (teste on safari). It is not possible to set value longer then 20 chars.
 
 ## Global variables (hack)
-create dummy quick app and run code.
+1. create global variables Settings->General->Variables
+```text
+"netatmo_clientId"=""
+"netatmo_secret"="your seecret"
+"netatmo_userName"="your username"
+"netatmo_password"="your password"
+"netatmoModules"="{}"
+"netatmo_sy"="{}" 
+```
+
+2. create dummy quick app and paste code to init function.
 ```lua
 fibaro.setGlobalVariable("netatmo_clientId", "your cliebt")
 fibaro.setGlobalVariable("netatmo_secret", "your seecret")
@@ -39,10 +49,12 @@ local sy={snow='\240\159\140\168',fog='\240\159\140\171',sunny='\226\152\128\239
  fibaro.setGlobalVariable("netatmo_sy", json.encode(sy))  
 
 ```
+3. check if variables is initialized
+![Global_vars](global_vars.png?raw=true "Global Vars")
 
 ## Devices and icons
 
-1. base station
+1. base station (must be installed)
 2. rain
 3. wind
 4. outdoor
