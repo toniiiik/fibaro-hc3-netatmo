@@ -31,7 +31,7 @@ instalation is same as other devices but in variables there is required value fo
 ![Indoor_variables](doc/indoor_variables.png?raw=true "indoor variables")
 
 when you add indoor device controller the three more devices is created during first start.
-![Indoor_devices](doc/indoor_devices.png?raw=true "indoor device")
+![Indoor_device](doc/indoor_device.png?raw=true "indoor device")
 
 
 ## Devices and icons
