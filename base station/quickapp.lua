@@ -21,6 +21,7 @@ local baseUrl =  "https://api.netatmo.com"
 local refresh_s = 5 * 60
 
 local BASE_MODULE="base"
+local INDOOR_MODULE="NAModule4"
 local RAIN_MODULE="NAModule3"
 local WIND_MODULE="NAModule2"
 local OUTDOOR_MODULE="NAModule1"
@@ -203,13 +204,15 @@ function createNetatmoClient(modules)
     self.base = modules.BASE_MODULE or {}
     self.wind = modules.WIND_MODULE or {}
     self.out = modules.OUTDOOR_MODULE or {}
+    self.indoor = modules.INDOOR_MODULE or {}
 
     function self.getModules()
         local m = {
             RAIN_MODULE = self.rain,
             BASE_MODULE = self.base,
             WIND_MODULE = self.wind,
-            OUTDOOR_MODULE = self.out
+            OUTDOOR_MODULE = self.out,
+            INDOOR_MODULE = self.indoor
         }
         return m
     end
@@ -278,25 +281,32 @@ function createNetatmoClient(modules)
         self.measureToComplete = 0
         if self.rain.fail == 0 then 
             debug("start rain measure")
-            self.getMeasure(RAIN_MODULE, self.rain._id, "sum_rain", "1hour", "true", os.time() - 60*60, nil, nil)
+            self.getMeasure(self.rain.name, RAIN_MODULE, self.rain._id, "sum_rain", "1hour", "true", os.time() - 60*60, nil, nil)
             self.measureToComplete = self.measureToComplete + 1
-            self.getMeasure(RAIN_MODULE, self.rain._id, "sum_rain", "1hour", "true", os.time() - 60*60 * 24, nil, "Day")
+            self.getMeasure(self.rain.name, RAIN_MODULE, self.rain._id, "sum_rain", "1hour", "true", os.time() - 60*60 * 24, nil, "Day")
             self.measureToComplete = self.measureToComplete + 1
-            self.getMeasure(RAIN_MODULE, self.rain._id, "sum_rain", "1hour", "true", os.time() - 60*60 * 24 * 7, nil, "Week")
+            self.getMeasure(self.rain.name, RAIN_MODULE, self.rain._id, "sum_rain", "1hour", "true", os.time() - 60*60 * 24 * 7, nil, "Week")
             self.measureToComplete = self.measureToComplete + 1
-            self.getMeasure(RAIN_MODULE, self.rain._id, "sum_rain", "1hour", "true", os.time() - 60*60 * 24 * 30, nil, "Month")
+            self.getMeasure(self.rain.name, RAIN_MODULE, self.rain._id, "sum_rain", "1hour", "true", os.time() - 60*60 * 24 * 30, nil, "Month")
             self.measureToComplete = self.measureToComplete + 1
         end
 
         if self.wind.fail == 0 then
             debug("start wind measure")
-            self.getMeasure(WIND_MODULE, self.wind._id, "WindStrength,WindAngle,GustStrength,GustAngle", "max", nil, nil, "last")
+            self.getMeasure(self.wind.name, WIND_MODULE, self.wind._id, "WindStrength,WindAngle,GustStrength,GustAngle", "max", nil, nil, "last")
             self.measureToComplete = self.measureToComplete + 1
         end
 
         if self.out.fail == 0 then
             debug("start out measure")
-            self.getMeasure(OUTDOOR_MODULE, self.out._id, "humidity,temperature", "max", nil, nil, "last")
+            self.getMeasure(self.out.name, OUTDOOR_MODULE, self.out._id, "humidity,temperature", "max", nil, nil, "last")
+            self.measureToComplete = self.measureToComplete + 1
+        end
+
+        for k,v in pairs(self.indoor) do
+            debug("start indoor measure", k)
+
+            self.getMeasure(k, INDOOR_MODULE, v._id, "humidity,temperature,CO2", "max", nil, nil, "last")
             self.measureToComplete = self.measureToComplete + 1
         end
     end
@@ -329,7 +339,30 @@ function createNetatmoClient(modules)
         if self.base.unit == "imperial" then
             self.out.temp = ((self.out.temp * 9 / 5) + 32)
         end
-        debug(json.encode(self.out))
+        -- debug(json.encode(self.out))
+    end
+
+     function self.parseNAModule4(data, module)
+        debug("parse indoor")
+
+        self.indoor[module].humid_min = self.indoor[module].humid_min or 99
+        self.indoor[module].humid_max = self.indoor[module].humid_max or 0
+                    
+        self.indoor[module].humid = data.body[1].value[1][1]
+        self.indoor[module].humid_min, self.indoor[module].humid_max =
+          calcMinMax(
+          self.indoor[module].humid_min,
+          self.indoor[module].humid_max,
+          self.indoor[module].humid,
+          "indoor No." .. module .. " humidity"
+        )
+        self.indoor[module].temp = data.body[1].value[1][2]
+        if self.base.unit == "imperial" then
+          self.indoor[module].temp = ((self.indoor[module].temp * 9 / 5) + 32)
+        end
+        self.indoor[module].co2 = data.body[1].value[1][3]
+        
+        trace("indoor module ", module, json.encode(self.out))
     end
 
     function self.parseNAModule2(data)
@@ -498,14 +531,63 @@ function createNetatmoClient(modules)
         self.parseNAModule3(data, "month")
     end
 
-    function self.getModule(data, module)
+    function self.getModuleByType(data, module)
+        local mods = {}
         for _, v in pairs(data.body.devices[1].modules) do
             if v.type == module then
-               return v 
+                table.insert(mods, v)
             end
         end
-        debug("no module ", module, " found.")
-        return nil
+        return mods
+    end
+
+    function self.getModule(data, module)
+        local m = self.getModuleByType(data, module)
+        debug(module,": ",json.encode(m))
+        if #m == 0 then
+            debug("no module ", module, " found.")
+            return nil
+        end
+        return m[1]
+    end
+
+    function self.parseIndoorModule(v)
+        debug("indoor module found", v.module_name)
+        if self.indoor[v.module_name] == nil then
+            self.indoor[v.module_name] = {}
+        end
+        
+        self.indoor[v.module_name].fail=0
+        self.indoor[v.module_name].name = v.module_name
+        self.indoor[v.module_name]._id = v._id
+        self.indoor[v.module_name].batt = v.battery_percent
+        self.indoor[v.module_name]._rf = (100 - v.rf_status)
+        self.indoor[v.module_name].last_message = v.last_message
+        self.indoor[v.module_name].last_seen = v.last_seen
+        self.indoor[v.module_name].firmware = v.firmware
+        self.indoor[v.module_name].temp_min = v.dashboard_data.min_temp
+        self.indoor[v.module_name].temp_max = v.dashboard_data.max_temp
+        if self.base.unit == "imperial" then
+            self.indoor[v.module_name].temp_min = ((self.indoor[v.module_name].temp_min * 9 / 5) + 32)
+            self.indoor[v.module_name].temp_max = ((self.indoor[v.module_name].temp_max * 9 / 5) + 32)
+        end
+        self.indoor[v.module_name].temp_trend = v.dashboard_data.temp_trend
+        
+    end
+
+    function self.parseIndoorData(data)
+        trace("Indoors: ", json.encode(self.indoor))
+        local indoors = self.getModuleByType(data, INDOOR_MODULE)
+        debug("Indoors founded: ", #indoors)
+        if #indoors == 0 then
+            return nil
+        end
+        trace("indoor data", json.encode(indoors))
+        for _, v in pairs(indoors) do
+            self.parseIndoorModule(v)
+        end
+        
+        return self.indoor
     end
 
      function self.parseOutData(data)
@@ -675,8 +757,8 @@ function createNetatmoClient(modules)
         local dataUrl = self.getUrl("/oauth2/token")
         local requestBody =  "grant_type=password&" .. "client_id=" .. clientId .. "&client_secret=" .. secret .. "&username=" .. username .. "&password=" .. password .. "&scope=read_station"
 
-        verbose("url: ",dataUrl)
-        verbose("data: ",requestBody)
+        trace("url: ",dataUrl)
+        trace("data: ",requestBody)
 
         self.httpClient:request(dataUrl, {
             options={
@@ -727,7 +809,7 @@ function createNetatmoClient(modules)
     end
 
     function self.checkResponse(res)
-        debug(json.encode(res))
+        trace(json.encode(res))
         if res.status == 200 then
             return true, res.data
         end
@@ -768,7 +850,7 @@ function createNetatmoClient(modules)
         })
     end
 
-    function self.getMeasure(moduleType, moduleId, type, scale, real_time, date_begin, date_end, measureOpt)
+    function self.getMeasure(moduleName, moduleType, moduleId, type, scale, real_time, date_begin, date_end, measureOpt)
         local dataUrl = self.getUrl("/api/getmeasure") .. 
                         "?device_id=" .. self.base._id .. 
                         "&module_id=" .. moduleId .. 
@@ -801,7 +883,7 @@ function createNetatmoClient(modules)
             success = function(response)
                 local ok, res = self.checkResponse(response)
                 if ok then
-                    post({type="onMeasureData", d = json.decode(res), moduleType=moduleType, measureOpt = measureOpt})
+                    post({type="onMeasureData", d = json.decode(res), moduleName=moduleName, moduleType=moduleType, measureOpt = measureOpt})
                     return
                 end
                 post({type="onMeasureError", error = res})
@@ -843,12 +925,9 @@ end
 -- This is QuickApp inital method. It is called right after your QuickApp starts (after each save or on gateway startup). 
 -- Here you can set some default values, setup http connection or get QuickApp variables.
 -- To learn more, please visit: https://manuals.fibaro.com/
-local trace = true
 function post(e,t) 
-    if trace then
-        debug("event: ", json.encode(e))
-        debug("timeout: ", t or 0)
-    end
+    trace("event: ", json.encode(e))
+    trace("timeout: ", t or 0)
     setTimeout(function() main(e) end,t or 0) 
 end
 
@@ -868,20 +947,43 @@ function main(e)
             appSelf.nC.getData() 
         end,
         onData = function(e) 
-            -- debug(json.encode(e.d))
-            local base = appSelf.nC.parseBaseData(e.d)
-            local rain = appSelf.nC.parseRainData(e.d)
-            local out = appSelf.nC.parseOutData(e.d)
-            local wind = appSelf.nC.parseWindData(e.d)
-            debug("base:", json.encode(base))
-            debug("rain:", json.encode(rain))
-            debug("wind:", json.encode(wind))
-            debug("out:", json.encode(out))
+            -- trace("On data:", json.encode(e.d))
+            local okb, base = pcall(appSelf.nC.parseBaseData, e.d)
+            if not okb  then
+                debug("base failed to update")
+            end
+
+            local okr, rain = pcall(appSelf.nC.parseRainData, e.d)
+            if not okr  then
+                debug("rain failed to update")
+            end
+
+            local oko, out = pcall(appSelf.nC.parseOutData, e.d)
+            if not oko  then
+                debug("out failed to update")
+            end
+
+            local okw, wind = pcall(appSelf.nC.parseWindData, e.d)
+            if not okw  then
+                debug("wind failed to update")
+            end
+
+            local oki, indoor = pcall(appSelf.nC.parseIndoorData, e.d)
+            if not oki  then
+                debug("indoor failed to update")
+            end
+
+            trace("base:", json.encode(base))
+            trace("rain:", json.encode(rain))
+            trace("wind:", json.encode(wind))
+            trace("out:", json.encode(out))
+            trace("indoor:", json.encode(indoor))
+            
             appSelf:refreshView()
             appSelf.nC.startMeasure()
         end,
         onDataError = function(e) 
-            debug(json.encode(e)) 
+            error(json.encode(e)) 
             -- handle error properly
             -- if e.error.code == 2 then
             --     appSelf.nC.refreshToken()
@@ -890,12 +992,13 @@ function main(e)
             post({type="start"})   
         end,
         onMeasureData = function(e) -- d, moduleType
-            debug("mesure for: ", e.moduleType, " with data: ", json.encode(e.d))
-            appSelf.nC["parse" .. e.moduleType .. (e.measureOpt or "")](e.d)
+            debug("mesure for: ", e.moduleType)
+            trace("|---with data: ", json.encode(e.d))
+            appSelf.nC["parse" .. e.moduleType .. (e.measureOpt or "")](e.d, e.moduleName)
             appSelf.nC.measureDone()
         end,
         onMeasureError = function(e)
-            debug(json.encode(e))
+            error(json.encode(e))
             appSelf.nC.measureDone()
             if e.error == "invalid_token" then
                 appSelf.nC.refreshToken()
@@ -1079,7 +1182,8 @@ function QuickApp:onInit()
     self:debug("onInit")
 
     debug = function(text, ...) self:debug(text, ...) end
-    verbose = function(text, ...) if trace then self:debug(text, ...) end end
+    trace = function(text, ...) self:trace(text, ...) end
+    error = function(text, ...) self:error(text, ...) end
     
     self:initIcons()
     self:initVariables()

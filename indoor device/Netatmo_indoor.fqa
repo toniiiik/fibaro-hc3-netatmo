@@ -1,0 +1,46 @@
+{
+  "name": "Netatmo indoor",
+  "type": "com.fibaro.deviceController",
+  "apiVersion": "1.1",
+  "initialProperties": {
+    "viewLayout": {
+      "$jason": {
+        "body": {
+          "header": {
+            "style": {
+              "height": "0"
+            },
+            "title": "quickApp_device_123"
+          },
+          "sections": {
+            "items": []
+          }
+        },
+        "head": {
+          "title": "quickApp_device_123"
+        }
+      }
+    },
+    "uiCallbacks": [],
+    "mainFunction": "-- Device Controller is a little more advanced than other types. \n-- It can create child devices, so it can be used for handling multiple physical devices.\n-- E.g. when connecting to a hub, some cloud service or just when you want to represent a single physical device as multiple endpoints.\n-- \n-- Basic knowledge of object-oriented programming (oop) is required. \n-- Learn more about oop: https://en.wikipedia.org/wiki/Object-oriented_programming \n-- Learn more about managing child devices: https://manuals.fibaro.com/home-center-3-quick-apps/\n\nlocal refresh_rate=60*10\n\nfunction post(e,t) \n    appSelf:trace(\"event: \", json.encode(e))\n    appSelf:trace(\"timeout: \", t or 0)\n\n    setTimeout(function() main(e) end,t or 0) \nend\n\nfunction main(e)\n    ({\n        start = function(e) \n             appSelf:debug(\"starting device\")\n            local m = fibaro.getGlobalVariable(\"netatmoModules\")\n            if m == \"\" then\n                appSelf:debug(\"no data available... try after 10 min\")\n                post({type=\"start\"}, 60 * 10 * 1000)\n                return\n            end\n            post({type = \"measure\", data = m})\n        end,\n        measure = function(e)\n            if e.data == nil then\n                appSelf:debug(\"updating data from global state\")\n                e.data = fibaro.getGlobalVariable(\"netatmoModules\")\n            end\n            local module = json.decode(e.data)\n            appSelf:updateModule(module)\n            post({type = \"measure\"}, refresh_rate * 1000)\n        end\n       \n    })[e.type](e)\nend\n\nfunction QuickApp:initIcons()\n    self.ic = {}\n    self.ic.main_icon       = 1011\n    self.ic.blue_icon       = 1013\n    self.ic.light_blue_icon = 1014\n    self.ic.green_icon      = 1012\n    self.ic.yellow_icon     = 1015\n    self.ic.red_icon        = 1016\n    self.ic.batt_icon       = 1017\n    self.ic.error_icon      = 1018\nend\n\nfunction QuickApp:updateModule(m)\n    self.module = m\n    self:trace(json.encode(m.INDOOR_MODULE[self.module_name]))\n    if self.temperature ~= nil then\n        self.temperature:setTemperature(m.INDOOR_MODULE[self.module_name].temp or 0)\n    end\n\n    if self.humid ~= nil then\n        self.humid:setValue(m.INDOOR_MODULE[self.module_name].humid or 0)\n    end\n\n    if self.co ~= nil then\n        self.co:setValue(m.INDOOR_MODULE[self.module_name].co2 or 0)\n    end\n\n    self:debug(\"updating module state.... DONE\")\n    self:refreshView(m)\nend\n\nfunction QuickApp:refreshView(m)\n    local cTime = os.time();\n    if ((cTime - m.last_seen) < 1800) then\n        if m.batt > batt_level then\n            self:debug(\"battery ok\")\n        else\n            self:debug(\"battery low: \", m.batt)\n        end\n    else\n        self:debug(\"ERROR - Indoor module not updated recently\")\n        self:debug(json.encode(m))\n    end\nend\n\nfunction QuickApp:onInit()\n    self:debug(\"QuickApp:onInit\")\n    self.module_name = self:getVariable(\"module_name\")\n\n    self:createTemperature()\n    self:createHumid()\n    self:createCO()\n\n    self:debug(\"Starting indoor module: \", self.module_name)\n    self:initIcons()\n    appSelf=self\n    -- Setup classes for child devices.\n    -- Here you can assign how child instances will be created.\n    -- If type is not defined, QuickAppChild will be used.\n    self:initChildDevices({\n        [\"com.fibaro.temperatureSensor\"] = NetatmoIndoorTemperature,\n        [\"com.fibaro.humiditySensor\"] = NetatmoIndoorHumid,\n        [\"com.fibaro.multilevelSensor\"] = NetatmoIndoorCO,\n    })\n\n    -- Print all child devices.\n    self:debug(\"Child devices:\")\n    for id,device in pairs(self.childDevices) do\n        self:debug(\"[\", id, \"]\", device.name, \", type of: \", device.type)\n        if device.type == \"com.fibaro.temperatureSensor\" then\n            self.temperature = device\n        end\n        if device.type == \"com.fibaro.humiditySensor\" then\n            self.humid = device\n        end\n        if device.type == \"com.fibaro.multilevelSensor\" then\n            self.co = device\n        end\n    end\n\n    post({type=\"start\"})\nend\n\n-- Sample method to create a new child. It can be used in a button. \nfunction QuickApp:createTemperature()\n    local tempOk = self:getVariable(\"tempOk\") or \"nok\"\n    if tempOk == \"ok\" then\n        return\n    end\n\n    local child = self:createChildDevice({\n        name = \"Temperature\",\n        type = \"com.fibaro.temperatureSensor\",\n    }, NetatmoIndoorTemperature)\n\n    self:trace(\"Child device created: \", child.id)\n    self:setVariable(\"tempOk\", \"ok\")\nend\n-- Sample method to create a new child. It can be used in a button. \nfunction QuickApp:createHumid()\n    local devOk = self:getVariable(\"humidOk\") or \"nok\"\n    if devOk == \"ok\" then\n        return\n    end\n\n    local child = self:createChildDevice({\n        name = \"Humidity\",\n        type = \"com.fibaro.humiditySensor\",\n    }, NetatmoIndoorHumid)\n\n    self:trace(\"Child device created: \", child.id)\n    self:setVariable(\"humidOk\", \"ok\")\nend\n-- Sample method to create a new child. It can be used in a button. \nfunction QuickApp:createCO()\n    local devOk = self:getVariable(\"coOk\") or \"nok\"\n    if devOk == \"ok\" then\n        return\n    end\n\n    local child = self:createChildDevice({\n        name = \"CO 2\",\n        type = \"com.fibaro.multilevelSensor\",\n    }, NetatmoIndoorHumid)\n\n    self:trace(\"Child device created: \", child.id)\n    self:setVariable(\"coOk\", \"ok\")\nend\n\n-- TEMPERATURE\n-- Sample class for handling your binary switch logic. You can create as many classes as you need.\n-- Each device type you create should have its class which inherits from the QuickAppChild type.\nclass 'NetatmoIndoorTemperature' (QuickAppChild)\n\n-- __init is a constructor for this class. All new classes must have it.\nfunction NetatmoIndoorTemperature:__init(device)\n    -- You should not insert code before QuickAppChild.__init. \n    QuickAppChild.__init(self, device) \n\n    self:debug(\"NetatmoIndoorTemperature init\")   \nend\n\nfunction NetatmoIndoorTemperature:hello()\n    self:debug(\"hello\")\nend\n\nfunction NetatmoIndoorTemperature:setTemperature(value)\n    self:debug(\"New value: \", value)\n    self:updateProperty(\"value\", value)\nend\n\n-- HUMIDITY\n-- Sample class for handling your binary switch logic. You can create as many classes as you need.\n-- Each device type you create should have its class which inherits from the QuickAppChild type.\nclass 'NetatmoIndoorHumid' (QuickAppChild)\n\n-- __init is a constructor for this class. All new classes must have it.\nfunction NetatmoIndoorHumid:__init(device)\n    -- You should not insert code before QuickAppChild.__init. \n    QuickAppChild.__init(self, device) \n\n    self:debug(\"NetatmoIndoorHumid init\")   \nend\n\nfunction NetatmoIndoorHumid:hello()\n    self:debug(\"hello\")\nend\n\nfunction NetatmoIndoorHumid:setValue(value)\n    self:debug(\"New value: \", value)\n    self:updateProperty(\"value\", value)\nend\n\n-- CO2\n-- Sample class for handling your binary switch logic. You can create as many classes as you need.\n-- Each device type you create should have its class which inherits from the QuickAppChild type.\nclass 'NetatmoIndoorCO' (QuickAppChild)\n\n-- __init is a constructor for this class. All new classes must have it.\nfunction NetatmoIndoorCO:__init(device)\n    -- You should not insert code before QuickAppChild.__init. \n    QuickAppChild.__init(self, device) \n\n    self:debug(\"NetatmoIndoorCO init\")   \nend\n\nfunction NetatmoIndoorCO:hello()\n    self:debug(\"hello\")\nend\n\nfunction NetatmoIndoorCO:setValue(value)\n    self:debug(\"New value: \", value)\n    self:updateProperty(\"value\", value)\n    self:updateProperty(\"unit\", \"ppm\")\nend\n\n\n",
+    "quickAppVariables": [
+      {
+        "name": "module_name",
+        "value": "Module"
+      },
+      {
+        "name": "tempOk",
+        "value": "nok"
+      },
+      {
+        "name": "humidOk",
+        "value": "nok"
+      },
+      {
+        "name": "coOk",
+        "value": "nok"
+      }
+    ],
+    "typeTemplateInitialized": true
+  }
+}

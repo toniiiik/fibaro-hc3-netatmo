@@ -23,6 +23,17 @@ thanks @Sankotronic for the Netatmo integration with HC2 https://forum.fibaro.co
 ## Instalation of another modules
 just upload fqa for module no other setup is needed. 
 
+## Instalation of indoor module
+
+!!! works only with latest version of HC3 (at the time build: 5.030.45)
+
+instalation is same as other devices but in variables there is required value for proper function. ``module_name`` is the name which you choose in netatmo application when you add additional indoor devices.
+![Indoor_variables](doc/indoor_variables.png?raw=true "indoor variables")
+
+when you add indoor device controller the three more devices is created during first start.
+![Indoor_devices](doc/indoor_devices.png?raw=true "indoor device")
+
+
 ## Devices and icons
 
 1. base station (must be installed)
@@ -43,12 +54,12 @@ setup icon IDs for each device and state in QuickApp:initIcons function. If you 
 - [ ] add lang support
 - [ ] setup icon IDs via device variable
 - [ ] update user incons code via the module variables not the quickapp code
-- [ ] more debug and error handling
-- [ ] use pcall to handle "exceptions" in code to prevent app crash.
+- [x] more debug and error handling
+- [x] use pcall to handle "exceptions" in code to prevent app crash.
 - [ ] add actions to support module device refresh invoke.
 - [ ] split module data to separate variables and use event handlers to update module state
 - [ ] add separate device for outdoor humid and temperature
-- [ ] add support for additional indoor modules
+- [x] add support for additional indoor modules
 - [ ] add support for more then one station
 - [ ] add weather provider class with data from base station
 
